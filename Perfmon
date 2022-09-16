@@ -1,0 +1,2617 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.IO;
+using SQL_CHECK.CLASS;
+using System.Windows.Forms.DataVisualization;
+using System.Runtime.InteropServices;
+
+namespace SQL_CHECK.Winform
+{
+    public partial class Perfmon : MetroFramework.Forms.MetroForm
+    {
+
+        public Perfmon()
+        {
+            InitializeComponent();
+            //그룹박스로 묶기 위한 구문들
+            this.groupBox2.Controls.Add(this.chart1);
+            this.groupBox2.Controls.Add(this.label6);
+            this.groupBox2.Controls.Add(this.avg_textbox);
+            this.groupBox2.Controls.Add(this.label7);
+            this.groupBox2.Controls.Add(this.max_textbox);
+            this.groupBox2.Controls.Add(this.label8);
+            this.groupBox2.Controls.Add(this.min_textbox);
+        }
+        DataTable dt = new DataTable();
+        DataTable mtcdt = new DataTable();
+        OpenFileDialog opf = new OpenFileDialog();
+        List<string> yearlist = new List<string>();
+        List<string> monthlist = new List<string>();
+        List<string> daylist = new List<string>();
+        
+        private void Callfile_btn_Click(object sender, EventArgs e)
+        {
+            dataGridView1.DataSource = null;
+
+            //csv 형식의 파일을 불러옴
+            opf.Filter = "csv File|*.csv";
+
+            SelectCondition_combobox.Items.Clear();
+            if (opf.ShowDialog() == DialogResult.OK)
+            {
+                Csvfilename_txtbox.Text = opf.FileName;
+                string[] lines = System.IO.File.ReadAllLines(opf.FileName);
+                string firstLine = lines[0];
+                string[] headerLabels = firstLine.Split(',');
+                
+
+                for (int i = 1; i < headerLabels.Length; i++)
+                {
+                    string[] filterheaderLabels = headerLabels[i].Split('\\');
+                    int index = filterheaderLabels[3].IndexOf(':');
+                    string lastWord = filterheaderLabels[3].Substring(filterheaderLabels[3].Length-1);
+                    int lastindex = filterheaderLabels[3].LastIndexOf(lastWord) - (index);
+                    /*
+                     "\"\\\\DESKTOP-37RGVV9\\SQLServer:Access Methods\\FreeSpace Page Fetches/sec\""
+                     */
+                    if (index == -1)
+                    {
+                        if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Memory\\Available MBytes" ||
+                            filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "PhysicalDisk(_Total)\\Avg. Disk sec/Read" ||
+                            filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Processor(_Total)\\% Processor Time")
+                        {
+                            /*
+                             * i == 1 || i ==84 || i==22||i==37||i==50||i==68
+                             * [1]  "\"\\\\DESKTOP-37RGVV9\\Memory\\Available MBytes\""
+                             * [22] "\"\\\\DESKTOP-37RGVV9\\SQLServer:Buffer Manager\\Page life expectancy\""
+                             * [37] "\"\\\\DESKTOP-37RGVV9\\SQLServer:Locks(_Total)\\Average Wait Time (ms)\""
+                             * [50] "\"\\\\DESKTOP-37RGVV9\\SQLServer:SQL Statistics\\Batch Requests/sec\""
+                             * [68] "\"\\\\DESKTOP-37RGVV9\\PhysicalDisk(_Total)\\Avg. Disk sec/Read\""
+                             * [84] "\"\\\\DESKTOP-37RGVV9\\Processor(_Total)\\% Processor Time\""
+                             */
+                            SelectCondition_combobox.Items.Add("***" + filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "***");
+
+                        }
+                        else
+                        {
+                            SelectCondition_combobox.Items.Add(filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                        }
+                    }
+                    else
+                    {
+                        if (filterheaderLabels[3].Substring(index,filterheaderLabels[3].Length - (index+1)).Length >= 13)
+                        {
+                            if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index+1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Buffer Manager\\Page life expectancy" ||
+                            filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index+1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Locks(_Total)\\Average Wait Time (ms)" ||
+                            filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index+1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "SQL Statistics\\Batch Requests/sec")
+                            {
+                                SelectCondition_combobox.Items.Add("***" + filterheaderLabels[3].ToString().Substring(index + 1).Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "***");
+                            }
+                            else
+                            {
+                                SelectCondition_combobox.Items.Add(filterheaderLabels[3].ToString().Substring(index + 1).Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                            }
+                        }
+                        else
+                        {
+                            SelectCondition_combobox.Items.Add(filterheaderLabels[3].ToString().Substring(index + 1).Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                        }
+                    }
+                }
+                
+                try
+                {                   
+                    Searching();
+                    TimeRange();
+                    MainCheckTimeSearching();
+                    dataGridView1.DataSource = dt;
+                }
+                catch(Exception ex)
+                {
+                    MessageBox.Show(ex.Message,"불러오기 실패");
+                    dt.Rows.Clear();
+                    dt.Columns.Clear();
+                }
+
+                
+            }
+        }
+
+        private void MainCheck_btn_Click(object sender, EventArgs e)
+        {
+            opf.FileName = Csvfilename_txtbox.Text;
+            try
+            {
+                MainCheckSearching();
+                dataGridView1.DataSource = dt;
+                
+            }
+            catch(Exception ec)
+            {
+                MessageBox.Show(ec.Message, "주요데이터 필터 실패");
+                dt.Columns.Clear();
+                dt.Rows.Clear();
+            }
+        }
+        private void SelectTimebtn_Click(object sender, EventArgs e)
+        {
+            if (AllFilterCombox.Checked == true)
+            {
+                opf.FileName = Csvfilename_txtbox.Text;
+                try
+                {
+                    AllCheckTimeSearching();
+                    dataGridView1.DataSource = dt;
+                    
+                }
+                catch(Exception ed)
+                {
+                    MessageBox.Show(ed.Message, "시간 설정 전체 데이터 조회 실패");
+                    //dt.Columns.Clear();
+                    //dt.Rows.Clear();
+                }
+            }
+            else if (SelectFilterCombox.Checked == true)
+            {
+                opf.FileName = Csvfilename_txtbox.Text;
+                try
+                {
+                    MainCheckTimeSearching();
+                    dataGridView1.DataSource = dt;
+                    firsttime_txtbox.Text = string.Empty;
+                    lasttime_txtbox.Text = string.Empty;
+                }
+                catch (Exception ed)
+                {
+                    MessageBox.Show(ed.Message, "시간 설정 주요 데이터 조회 실패");
+                }
+            }
+            else
+            {
+
+            }
+
+        }
+        private void chart_btn_Click(object sender, EventArgs e)
+        {
+            
+            chart1.Titles.Clear();
+            chart1.Series.Clear();
+            chart1.Series.Add("data");
+            string[] lines = System.IO.File.ReadAllLines(opf.FileName);
+            double[] values = new double[lines.Length - 1];
+            string[] times = new string[lines.Length - 1];
+
+            if (SelectCondition_combobox.SelectedIndex == -1)
+            {
+                if (SelectCondition_combobox.Text != "")
+                {
+                    for (int i = 0; i < SelectCondition_combobox.Items.Count; i++)
+                    {
+                        if (SelectCondition_combobox.Items[i].ToString() == SelectCondition_combobox.Text)
+                        {
+                            SelectCondition_combobox.SelectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+
+                }
+            }
+
+            try
+            {
+                for (int i = 0; i < lines.Length - 1; i++)
+                {
+                    string[] datavalue = lines[i + 1].Split(',');
+                    
+                    
+                    if (datavalue[SelectCondition_combobox.SelectedIndex + 1].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        values[i] = 0;
+                    }
+                    else
+                    {
+                        values[i] = double.Parse(datavalue[SelectCondition_combobox.SelectedIndex + 1].Replace('"', ' ').Replace('\\', ' ').Trim());
+                    }
+                    string[] filtertimes = datavalue[0].Split(' ');
+                    times[i] = datavalue[0].Replace('"', ' ').Replace('\\', ' ').Trim();
+                    chart1.Series[0].Points.AddXY(times[i], values[i]);
+                    
+                    
+                }
+            }
+            catch (Exception es)
+            {
+                MessageBox.Show(es.Message, "조건을 선택하십시오");
+            }
+            avg_textbox.Text = Avg(values).ToString();
+            max_textbox.Text = Max(values).ToString();
+            min_textbox.Text = Min(values).ToString();
+
+            avg_textbox2.Text = Avg(values).ToString();
+            max_textbox2.Text = Max(values).ToString();
+            min_textbox2.Text = Min(values).ToString();
+            chart1.Series[0].LegendText = "data";
+            chart1.Series[0].ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Line;
+            if (SelectCondition_combobox.SelectedIndex == 0 || SelectCondition_combobox.SelectedIndex == 83 || SelectCondition_combobox.SelectedIndex == 21 || SelectCondition_combobox.SelectedIndex == 36 || SelectCondition_combobox.SelectedIndex == 49 || SelectCondition_combobox.SelectedIndex == 67)
+            {
+                chart1.Titles.Add(SelectCondition_combobox.SelectedItem.ToString().Substring(3, SelectCondition_combobox.SelectedItem.ToString().Length - 6));
+            }
+            else
+            {
+                chart1.Titles.Add(SelectCondition_combobox.SelectedItem.ToString());
+            }
+            //SelectCondition_combobox.SelectedIndex = 0;
+            //TimeRange2();
+        }
+        private void SelectTimeChart_btn_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                chart1.Titles.Clear();
+                chart1.Series.Clear();
+                mtcdt.Rows.Clear();
+                mtcdt.Columns.Clear();
+                chart1.Series.Add("data");
+                chartAllCheckTimeSearching();
+
+
+                if (SelectCondition_combobox.SelectedIndex == -1)
+                {
+                    if (SelectCondition_combobox.Text != "")
+                    {
+                        for (int i = 0; i < SelectCondition_combobox.Items.Count; i++)
+                        {
+                            if (SelectCondition_combobox.Items[i].ToString() == SelectCondition_combobox.Text)
+                            {
+                                SelectCondition_combobox.SelectedIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        
+                    }
+                }
+                string[] lines = new string[mtcdt.Rows.Count];
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    for (int j = 0; j < mtcdt.Rows[i].ItemArray.Length; j++)
+                    {
+                        lines[i] += mtcdt.Rows[i].ItemArray[j].ToString() + ',';
+                    }
+                }
+                double[] values = new double[lines.Length];
+                string[] times = new string[lines.Length];
+                
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string[] datavalue = lines[i].Split(',');
+                    if (datavalue[SelectCondition_combobox.SelectedIndex + 1].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        values[i] = 0;
+                    }
+                    else
+                    {
+                        values[i] = double.Parse(datavalue[SelectCondition_combobox.SelectedIndex + 1].Replace('"', ' ').Replace('\\', ' ').Trim());
+                    }
+                    string[] filtertimes = datavalue[0].Split(' ');
+                    times[i] = datavalue[0].Replace('"', ' ').Replace('\\', ' ').Trim();
+                    chart1.Series[0].Points.AddXY(times[i], values[i]);
+                }
+                
+                avg_textbox.Text = Avg(values).ToString();
+                max_textbox.Text = Max(values).ToString();
+                min_textbox.Text = Min(values).ToString();
+                avg_textbox2.Text = Avg(values).ToString();
+                max_textbox2.Text = Max(values).ToString();
+                min_textbox2.Text = Min(values).ToString();
+                chart1.Series[0].LegendText = "data";
+                chart1.Series[0].ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Line;
+                if (SelectCondition_combobox.SelectedIndex == 0 || SelectCondition_combobox.SelectedIndex == 83 || SelectCondition_combobox.SelectedIndex == 21 || SelectCondition_combobox.SelectedIndex == 36 || SelectCondition_combobox.SelectedIndex == 49 || SelectCondition_combobox.SelectedIndex == 67)
+                {
+                    chart1.Titles.Add(SelectCondition_combobox.SelectedItem.ToString().Substring(3, SelectCondition_combobox.SelectedItem.ToString().Length - 6));
+                }
+                else
+                {
+                    chart1.Titles.Add(SelectCondition_combobox.SelectedItem.ToString());
+                }
+
+                
+                //TimeRange2();
+            }
+            catch(Exception ea)
+            {
+                MessageBox.Show(ea.Message, "구간 차트 조회 실패");
+            }
+        }
+        private void capture_btn_Click(object sender, EventArgs e)
+        {
+            Rectangle targetboundary = new Rectangle(0, 0, this.groupBox2.Width, this.groupBox2.Height);
+            //Point location1 = this.Location;
+            //Point location2 = this.chart1.Location;
+
+            Bitmap bt = new Bitmap(this.groupBox2.Width, this.groupBox2.Height);
+            this.groupBox2.DrawToBitmap(bt, targetboundary);
+            Clipboard.SetImage((Image)bt);
+
+        }
+        private void reset_btn_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                Searching();
+                TimeRange();
+                
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "초기화 실패");
+                dt.Rows.Clear();
+                dt.Columns.Clear();
+            }
+        }
+
+        private void Searching()
+        {
+            string[] lines = System.IO.File.ReadAllLines(opf.FileName);
+            if (lines.Length > 0)
+            {
+                dt.Columns.Clear();
+                dt.Rows.Clear();
+                mtcdt.Rows.Clear();
+                mtcdt.Columns.Clear();
+                //first line to create header
+                string firstLine = lines[0];
+                string[] headerLabels = firstLine.Split(',');
+                foreach (string headerWord in headerLabels)
+                {
+                    dt.Columns.Add(new DataColumn(headerWord));
+                }
+                //For Data
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    string[] dataWords = lines[i].Split(',');
+                    DataRow dr = dt.NewRow();
+                    int columnIndex = 0;
+                    foreach (string headerWord in headerLabels)
+                    {
+                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                        {
+                            dr[headerWord] = "0";
+                            columnIndex++;
+                        }
+                        else
+                        {
+                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                        }
+                    }
+                    dt.Rows.Add(dr);
+                }
+                
+            }
+        }
+        private void MainCheckSearching()
+        {
+
+            dt.Rows.Clear();
+            dt.Columns.Clear();
+            mtcdt.Rows.Clear();
+            mtcdt.Columns.Clear();
+
+            string[] lines = System.IO.File.ReadAllLines(opf.FileName);
+            if (lines.Length > 0)
+            {
+                //first line to create header
+                string firstLine = lines[0];
+                string[] headerLabels = firstLine.Split(',');
+                //dt.Columns.Add("타입");
+                //dt.Columns.Add("최대", typeof(double));
+                //dt.Columns.Add("평균", typeof(double));
+                //dt.Columns.Add("최소", typeof(double));
+
+                dt.Columns.Add("타입");
+                dt.Columns.Add("최대");
+                dt.Columns.Add("평균");
+                dt.Columns.Add("최소");
+                int TPTIndex =0;
+                int ADRIndex=0;
+                int AMBIndex=0;
+                int BRIndex=0;
+                int PLEIndex=0;
+                int LAWTIndex=0;
+
+                for (int i = 1; i < headerLabels.Length; i++)
+                {
+                    string[] filterheaderLabels = headerLabels[i].Split('\\');
+                    int index = filterheaderLabels[3].IndexOf(':');
+                    string lastWord = filterheaderLabels[3].Substring(filterheaderLabels[3].Length - 1);
+                    int lastindex = filterheaderLabels[3].LastIndexOf(lastWord) - (index);
+                    /*
+                     "\"\\\\DESKTOP-37RGVV9\\SQLServer:Access Methods\\FreeSpace Page Fetches/sec\""
+                     */
+                    if (index == -1)
+                    {
+                        if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Memory\\Available MBytes")
+                        {
+                            AMBIndex = i;
+                        }
+                        else if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "PhysicalDisk(_Total)\\Avg. Disk sec/Read")
+                        {
+                            ADRIndex = i;
+                        }
+                        else if(filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Processor(_Total)\\% Processor Time")
+                        {
+                            TPTIndex = i;
+                        }
+                        else
+                        {
+
+                        }
+                        
+                    }
+                    else
+                    {
+                        if (filterheaderLabels[3].Substring(index, filterheaderLabels[3].Length - (index + 1)).Length >= 13)
+                        {
+                            if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index + 1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Buffer Manager\\Page life expectancy")
+                            {
+                                PLEIndex = i;
+                            }
+                            else if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index + 1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Locks(_Total)\\Average Wait Time (ms)")
+                            {
+                                LAWTIndex = i;
+                            }
+                            else if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index + 1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "SQL Statistics\\Batch Requests/sec")
+                            {
+                                BRIndex = i;
+                            }
+                            
+                        }
+                        
+                    }
+                }
+
+                //For Data
+
+                double[] TPT = new double[lines.Length-1];
+                double[] ADR = new double[lines.Length - 1];
+                double[] AMB = new double[lines.Length - 1];
+                double[] BR = new double[lines.Length - 1];
+                double[] PLE = new double[lines.Length - 1];
+                double[] LAWT = new double[lines.Length - 1];
+                
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    /* OS
+                     * TPT -> Total Processor Time  o
+                     * ADR -> Avg. Disk sec/Read  o
+                     * AMB -> Available MByte
+                     
+                     * SQL Server
+                     * BR -> Batch Requests/sec
+                     * PLE -> Page life expectancy  o
+                     * LAWT -> Locks(_Total) Average Wait Time(ms)  o
+                     */
+
+
+                    string[] dataWords = lines[i].Split(',');
+                                        
+                    if (dataWords[TPTIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        dataWords[TPTIndex] = "0";
+                    }
+                    if (dataWords[ADRIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        dataWords[ADRIndex] = "0";
+                    }
+                    if (dataWords[AMBIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        dataWords[AMBIndex] = "0";
+                    }
+                    if (dataWords[BRIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        dataWords[BRIndex] = "0";
+                    }
+                    if (dataWords[PLEIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        dataWords[PLEIndex] = "0";
+                    }
+                    if (dataWords[LAWTIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        dataWords[LAWTIndex] = "0";
+                    }
+                   
+                    TPT[i-1] = double.Parse(dataWords[TPTIndex].Replace('"', ' ').Replace('\\', ' ').Trim());
+                    ADR[i-1] = double.Parse(dataWords[ADRIndex].Replace('"', ' ').Replace('\\', ' ').Trim());
+                    AMB[i-1] = double.Parse(dataWords[AMBIndex].Replace('"', ' ').Replace('\\', ' ').Trim());
+                    BR[i-1] = double.Parse(dataWords[BRIndex].Replace('"', ' ').Replace('\\', ' ').Trim());
+                    PLE[i-1] = double.Parse(dataWords[PLEIndex].Replace('"', ' ').Replace('\\', ' ').Trim());
+                    LAWT[i - 1] = double.Parse(dataWords[LAWTIndex].Replace('"', ' ').Replace('\\', ' ').Trim());
+
+                }
+                DataRow dr = dt.NewRow();
+                InsertDataRow1(TPT, dr, dt);
+                InsertDataRow2(ADR, dr, dt);
+                InsertDataRow3(AMB, dr, dt);
+                InsertDataRow4(BR, dr, dt);
+                InsertDataRow5(PLE, dr, dt);
+                InsertDataRow6(LAWT, dr, dt);
+                
+            }
+        }
+        private void AllCheckTimeSearching()
+        {
+            string[] time = new string[2];
+            string[] timeSeperate = new string[3];
+            string[] dateSeperate = new string[3];
+            string hour = string.Empty;
+            string min = string.Empty;
+            string sec = string.Empty;
+            string year = string.Empty;
+            string month = string.Empty;
+            string day = string.Empty;
+            
+
+
+            string[] lines = System.IO.File.ReadAllLines(opf.FileName);
+            if (lines.Length > 0)
+            {
+                dt.Columns.Clear();
+                dt.Rows.Clear();
+                
+
+                //first line to create header
+                string firstLine = lines[0];
+                string[] headerLabels = firstLine.Split(',');
+                foreach (string headerWord in headerLabels)
+                {
+                    dt.Columns.Add(new DataColumn(headerWord));
+                }
+                //For Data
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    string[] dataWords = lines[i].Split(',');
+                    //  "\"04/08/2022 11:29:21.361\"" 인덱스 [0]
+                    #region
+                    time = dataWords[0].Split(' ');
+                    timeSeperate = time[1].Split(':');
+                    dateSeperate = time[0].Split('/');
+                    hour = timeSeperate[0];
+                    min = timeSeperate[1];
+                    sec = timeSeperate[2].Replace('"', ' ').Replace('\\', ' ').Trim().Substring(0,2);
+                    year = dateSeperate[2];
+                    month = dateSeperate[0].Replace('"', ' ').Replace('\\', ' ').Trim();
+                    day = dateSeperate[1];
+                    
+                    #endregion
+                    DataRow dr = dt.NewRow();
+                    int columnIndex = 0;
+                    // 날짜, 시간 조건에 따른 데이터 서칭 조건문
+                    #region
+                    // 1. 연도, 월이 같고 전속 지정 일 보다 크거나 같고 후속 지정 일 보다 작거나 같은 경우
+                    if (year == bfyear_box.SelectedItem.ToString() && month == bfmonth_box.SelectedItem.ToString() && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()) && Int32.Parse(day) >= Int32.Parse(bfday_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                    }
+                    // 2. 연도가 같고, 월이 후속 지정 달보다 작은 경우
+                    else if (year == bfyear_box.SelectedItem.ToString() && Int32.Parse(month) < Int32.Parse(afmonth_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0"; 
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                    }
+                    // 3. 연도가 같고, 월이 후속 지정 달과 같은 경우
+                    else if (year == bfyear_box.SelectedItem.ToString() && Int32.Parse(month) > Int32.Parse(bfmonth_box.SelectedItem.ToString()) && Int32.Parse(month) == Int32.Parse(afmonth_box.SelectedItem.ToString()) && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()))
+                        {
+
+                        {
+                            if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                            {
+
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                            else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                            else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                            else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                            else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                        }
+                    }
+                    // 4. 연도가 전속 지정 년보다 크고 전속 지정 월과 같고 전속 지정 일보다 크거나 같고 후속 지정 일보다 작거나 같은경우
+                    else if (Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && month == bfmonth_box.SelectedItem.ToString() && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()) && Int32.Parse(day) >= Int32.Parse(bfday_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                    }
+                    // 5. 연도가 전속 지정 년보다 크고 후속 지정 달보다 작은 경우
+                    else if(Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && Int32.Parse(month) < Int32.Parse(afmonth_box.SelectedItem.ToString()))
+                    {
+
+                        {
+                            if (hour == bfHour.Text.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                            {
+
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                            else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                            else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                            else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                            else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                dt.Rows.Add(dr);
+                            }
+                        }
+                    }
+                    // 6. 연도가 전속 지정 년 보다 크고 후속 지정 달과 같은 경우
+                    else if(Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && Int32.Parse(month) == Int32.Parse(afmonth_box.SelectedItem.ToString()) && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()))
+                    {
+
+                        {
+
+                            {
+                                if (hour == bfHour.Text.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                                {
+
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    dt.Rows.Add(dr);
+                                }
+                                else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                                {
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    dt.Rows.Add(dr);
+                                }
+                                else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                                {
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    dt.Rows.Add(dr);
+                                }
+                                else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                                {
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    dt.Rows.Add(dr);
+                                }
+                                else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                                {
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    dt.Rows.Add(dr);
+                                }
+                            }
+                        }
+                    }
+                    // 7. 연도가 후속 지정 년과 같고 후속 지정 달보다 작은 경우
+                    else if (Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && Int32.Parse(year) == Int32.Parse(afyear_box.SelectedItem.ToString()) && Int32.Parse(month) < Int32.Parse(afmonth_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.Text.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                    }
+                    // 8. 연도가 후속 지정 년과 같고 후석 지정 달과 같고 후속 지정 일보다 작은 경우
+                    else if (Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && Int32.Parse(year) == Int32.Parse(afyear_box.SelectedItem.ToString()) && Int32.Parse(month) == Int32.Parse(afmonth_box.SelectedItem.ToString()) && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        #endregion
+                    }
+                    else
+                    {
+
+                    }
+
+
+                    hour = string.Empty;
+                    min = string.Empty;
+                    sec = string.Empty;
+                    year = string.Empty;
+                    month = string.Empty;
+                    day = string.Empty;
+                }
+                TimeRange2();
+            }
+        }
+        private void MainCheckTimeSearching()
+        {
+            dt.Rows.Clear();
+            dt.Columns.Clear();
+            mtcdt.Rows.Clear();
+            mtcdt.Columns.Clear();
+
+            AllCheckTimeSearching();
+            
+            string[] lines = System.IO.File.ReadAllLines(opf.FileName);
+            if (lines.Length > 0)
+            {
+                double[] TPT = new double[dt.Rows.Count];
+                double[] ADR = new double[dt.Rows.Count];
+                double[] AMB = new double[dt.Rows.Count];
+                double[] BR = new double[dt.Rows.Count];
+                double[] PLE = new double[dt.Rows.Count];
+                double[] LAWT = new double[dt.Rows.Count];
+
+                string firstLine = lines[0];
+                string[] headerLabels = firstLine.Split(',');
+
+                int TPTIndex = 0;
+                int ADRIndex = 0;
+                int AMBIndex = 0;
+                int BRIndex = 0;
+                int PLEIndex = 0;
+                int LAWTIndex = 0;
+
+                for (int i = 1; i < headerLabels.Length; i++)
+                {
+                    string[] filterheaderLabels = headerLabels[i].Split('\\');
+                    int index = filterheaderLabels[3].IndexOf(':');
+                    string lastWord = filterheaderLabels[3].Substring(filterheaderLabels[3].Length - 1);
+                    int lastindex = filterheaderLabels[3].LastIndexOf(lastWord) - (index);
+                    /*
+                     "\"\\\\DESKTOP-37RGVV9\\SQLServer:Access Methods\\FreeSpace Page Fetches/sec\""
+                     */
+                    if (index == -1)
+                    {
+                        if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Memory\\Available MBytes")
+                        {
+                            AMBIndex = i;
+                        }
+                        else if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "PhysicalDisk(_Total)\\Avg. Disk sec/Read")
+                        {
+                            ADRIndex = i;
+                        }
+                        else if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Processor(_Total)\\% Processor Time")
+                        {
+                            TPTIndex = i;
+                        }
+                        else
+                        {
+
+                        }
+
+                    }
+                    else
+                    {
+                        if (filterheaderLabels[3].Substring(index, filterheaderLabels[3].Length - (index + 1)).Length >= 13)
+                        {
+                            if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index + 1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Buffer Manager\\Page life expectancy")
+                            {
+                                PLEIndex = i;
+                            }
+                            else if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index + 1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "Locks(_Total)\\Average Wait Time (ms)")
+                            {
+                                LAWTIndex = i;
+                            }
+                            else if (filterheaderLabels[3].ToString().Replace('"', ' ').Replace('\\', ' ').Trim().Substring(index + 1, lastindex) + "\\" + filterheaderLabels[4].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "SQL Statistics\\Batch Requests/sec")
+                            {
+                                BRIndex = i;
+                            }
+
+                        }
+
+                    }
+                }
+
+                for (int i = 1; i <= dt.Rows.Count; i++)
+                {
+                    // 데이터에 공란이 들어가는 경우 0이 들어가게 설정
+                    if (dt.Rows[i - 1].ItemArray[TPTIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        TPT[i - 1] = 0;
+                    }
+                    else
+                    {
+                        TPT[i - 1] = double.Parse(dt.Rows[i - 1].ItemArray[TPTIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                    }
+                    if (dt.Rows[i - 1].ItemArray[ADRIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        ADR[i - 1] = 0;
+                    }
+                    else
+                    {
+                        ADR[i - 1] = double.Parse(dt.Rows[i - 1].ItemArray[ADRIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                    }
+                    if (dt.Rows[i - 1].ItemArray[AMBIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        AMB[i - 1] = 0;
+                    }
+                    else
+                    {
+                        AMB[i - 1] = double.Parse(dt.Rows[i - 1].ItemArray[AMBIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                    }
+                    if (dt.Rows[i - 1].ItemArray[BRIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        BR[i - 1] = 0;
+                    }
+                    else
+                    {
+                        BR[i - 1] = double.Parse(dt.Rows[i - 1].ItemArray[BRIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                    }
+                    if (dt.Rows[i - 1].ItemArray[PLEIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        PLE[i - 1] = 0;
+                    }
+                    else
+                    {
+                        PLE[i - 1] = double.Parse(dt.Rows[i - 1].ItemArray[PLEIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                    }
+                    if (dt.Rows[i - 1].ItemArray[LAWTIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                    {
+                        LAWT[i - 1] = 0;
+                    }
+                    else
+                    {
+                        LAWT[i - 1] = double.Parse(dt.Rows[i - 1].ItemArray[LAWTIndex].ToString().Replace('"', ' ').Replace('\\', ' ').Trim());
+                    }
+                }
+
+
+                dt.Rows.Clear();
+                dt.Columns.Clear();
+
+                //dt.Columns.Add("타입");
+                //dt.Columns.Add("최대", typeof(double));
+                //dt.Columns.Add("평균", typeof(double));
+                //dt.Columns.Add("최소", typeof(double));
+
+                dt.Columns.Add("타입");
+                dt.Columns.Add("최대");
+                dt.Columns.Add("평균");
+                dt.Columns.Add("최소");
+
+                DataRow dr = dt.NewRow();
+                InsertDataRow1(TPT, dr, dt);
+                InsertDataRow2(ADR, dr, dt);
+                InsertDataRow3(AMB, dr, dt);
+                InsertDataRow4(BR, dr, dt);
+                InsertDataRow5(PLE, dr, dt);
+                InsertDataRow6(LAWT, dr, dt);
+            }
+            
+        }
+        private void chartAllCheckTimeSearching()
+        {
+            string[] time = new string[2];
+            string[] timeSeperate = new string[3];
+            string[] dateSeperate = new string[3];
+            string hour = string.Empty;
+            string min = string.Empty;
+            string sec = string.Empty;
+            string year = string.Empty;
+            string month = string.Empty;
+            string day = string.Empty;
+
+
+
+            string[] lines = System.IO.File.ReadAllLines(opf.FileName);
+            if (lines.Length > 0)
+            {
+                mtcdt.Columns.Clear();
+                mtcdt.Rows.Clear();
+
+
+                //first line to create header
+                string firstLine = lines[0];
+                string[] headerLabels = firstLine.Split(',');
+                foreach (string headerWord in headerLabels)
+                {
+                    mtcdt.Columns.Add(new DataColumn(headerWord));
+                }
+                //For Data
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    string[] dataWords = lines[i].Split(',');
+                    //  "\"04/08/2022 11:29:21.361\"" 인덱스 [0]
+                    #region
+                    time = dataWords[0].Split(' ');
+                    timeSeperate = time[1].Split(':');
+                    dateSeperate = time[0].Split('/');
+                    hour = timeSeperate[0];
+                    min = timeSeperate[1];
+                    sec = timeSeperate[2].Replace('"', ' ').Replace('\\', ' ').Trim().Substring(0, 2);
+                    year = dateSeperate[2];
+                    month = dateSeperate[0].Replace('"', ' ').Replace('\\', ' ').Trim();
+                    day = dateSeperate[1];
+
+                    #endregion
+                    DataRow dr = mtcdt.NewRow();
+                    int columnIndex = 0;
+                    // 날짜, 시간 조건에 따른 데이터 서칭 조건문
+                    #region
+                    // 1. 연도, 월이 같고 전속 지정 일 보다 크거나 같고 후속 지정 일 보다 작거나 같은 경우
+                    if (year == bfyear_box.SelectedItem.ToString() && month == bfmonth_box.SelectedItem.ToString() && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()) && Int32.Parse(day) >= Int32.Parse(bfday_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                    }
+                    // 2. 연도가 같고, 월이 후속 지정 달보다 작은 경우
+                    else if (year == bfyear_box.SelectedItem.ToString() && Int32.Parse(month) < Int32.Parse(afmonth_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                    }
+                    // 3. 연도가 같고, 월이 후속 지정 달과 같은 경우
+                    else if (year == bfyear_box.SelectedItem.ToString() && Int32.Parse(month) > Int32.Parse(bfmonth_box.SelectedItem.ToString()) && Int32.Parse(month) == Int32.Parse(afmonth_box.SelectedItem.ToString()) && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()))
+                    {
+
+                        {
+                            if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                            {
+
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                            else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                            else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                            else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                            else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                        }
+                    }
+                    // 4. 연도가 전속 지정 년보다 크고 전속 지정 월과 같고 전속 지정 일보다 크거나 같고 후속 지정 일보다 작거나 같은경우
+                    else if (Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && month == bfmonth_box.SelectedItem.ToString() && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()) && Int32.Parse(day) >= Int32.Parse(bfday_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                    }
+                    // 5. 연도가 전속 지정 년보다 크고 후속 지정 달보다 작은 경우
+                    else if (Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && Int32.Parse(month) < Int32.Parse(afmonth_box.SelectedItem.ToString()))
+                    {
+
+                        {
+                            if (hour == bfHour.Text.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                            {
+
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                            else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                            else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                            else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                            else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                            {
+                                foreach (string headerWord in headerLabels)
+                                {
+                                    if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                    {
+                                        dr[headerWord] = "0";
+                                        columnIndex++;
+                                    }
+                                    else
+                                    {
+                                        dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                    }
+                                }
+                                mtcdt.Rows.Add(dr);
+                            }
+                        }
+                    }
+                    // 6. 연도가 전속 지정 년 보다 크고 후속 지정 달과 같은 경우
+                    else if (Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && Int32.Parse(month) == Int32.Parse(afmonth_box.SelectedItem.ToString()) && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()))
+                    {
+
+                        {
+
+                            {
+                                if (hour == bfHour.Text.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                                {
+
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    mtcdt.Rows.Add(dr);
+                                }
+                                else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                                {
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    mtcdt.Rows.Add(dr);
+                                }
+                                else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                                {
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    mtcdt.Rows.Add(dr);
+                                }
+                                else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                                {
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    mtcdt.Rows.Add(dr);
+                                }
+                                else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                                {
+                                    foreach (string headerWord in headerLabels)
+                                    {
+                                        if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                        {
+                                            dr[headerWord] = "0";
+                                            columnIndex++;
+                                        }
+                                        else
+                                        {
+                                            dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                        }
+                                    }
+                                    mtcdt.Rows.Add(dr);
+                                }
+                            }
+                        }
+                    }
+                    // 7. 연도가 후속 지정 년과 같고 후속 지정 달보다 작은 경우
+                    else if (Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && Int32.Parse(year) == Int32.Parse(afyear_box.SelectedItem.ToString()) && Int32.Parse(month) < Int32.Parse(afmonth_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.Text.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                    }
+                    // 8. 연도가 후속 지정 년과 같고 후석 지정 달과 같고 후속 지정 일보다 작은 경우
+                    else if (Int32.Parse(year) > Int32.Parse(bfyear_box.SelectedItem.ToString()) && Int32.Parse(year) == Int32.Parse(afyear_box.SelectedItem.ToString()) && Int32.Parse(month) == Int32.Parse(afmonth_box.SelectedItem.ToString()) && Int32.Parse(day) <= Int32.Parse(afday_box.SelectedItem.ToString()))
+                    {
+                        if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(bfMiniute.SelectedItem.ToString()) && Int32.Parse(sec) >= Int32.Parse(bfSec.SelectedItem.ToString()))
+                        {
+
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            dt.Rows.Add(dr);
+                        }
+                        else if (hour == bfHour.SelectedItem.ToString() && Int32.Parse(min) > Int32.Parse(bfMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (Int32.Parse(hour) > Int32.Parse(bfHour.SelectedItem.ToString()) && Int32.Parse(hour) < Int32.Parse(afHour.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) < Int32.Parse(afMiniute.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+
+                        else if (hour == afHour.SelectedItem.ToString() && Int32.Parse(min) == Int32.Parse(afMiniute.SelectedItem.ToString()) && Int32.Parse(sec) <= Int32.Parse(afSec.SelectedItem.ToString()))
+                        {
+                            foreach (string headerWord in headerLabels)
+                            {
+                                if (dataWords[columnIndex].Replace('"', ' ').Replace('\\', ' ').Trim() == "")
+                                {
+                                    dr[headerWord] = "0";
+                                    columnIndex++;
+                                }
+                                else
+                                {
+                                    dr[headerWord] = dataWords[columnIndex++].Replace('"', ' ').Replace('\\', ' ').Trim();
+                                }
+                            }
+                            mtcdt.Rows.Add(dr);
+                        }
+                        #endregion
+                    }
+                    else
+                    {
+
+                    }
+
+
+                    hour = string.Empty;
+                    min = string.Empty;
+                    sec = string.Empty;
+                    year = string.Empty;
+                    month = string.Empty;
+                    day = string.Empty;
+                }
+                //TimeRange2();
+            }
+        }
+
+        private string Max(double[] a)
+        {
+            double max = a[0];
+            if (a.Length > 1)
+            {
+                for (int i = 0; i < a.Length - 1; i++)
+                {
+                    if (max < a[i + 1])
+                    {
+                        max = a[i + 1]
+    ;
+                    }
+
+                }
+            }
+            else
+            {
+                max = a[0];
+            }
+            if (max > 1000)
+            {
+                string result = String.Format("{0:#,###.#}", Math.Round(max, 1));
+                return result;
+            }
+            else
+            {
+                string result = Math.Round(max, 1).ToString();
+                return result;
+            }
+            
+        }
+        private string Min(double[] a)
+        {
+            double min = a[0];
+            if (a.Length > 1)
+            {
+                for (int i = 0; i < a.Length - 1; i++)
+                {
+                    if (min > a[i + 1])
+                    {
+                        min = a[i + 1];
+                    }
+
+
+                }
+            }
+            else
+            {
+                min = a[0];
+            }
+            if (min > 1000)
+            {
+                string result = String.Format("{0:#,###.#}", Math.Round(min, 1));
+                return result;
+            }
+            else
+            {
+                string result = Math.Round(min, 1).ToString();
+                return result;
+            }
+        }
+        private string Avg(double[] a)
+        {
+            double avg = 0;
+            double sum = 0;
+            for(int i=0;i<a.Length;i++)
+            {
+                sum += a[i];
+            }
+            avg = sum / a.Length;
+
+            if (avg > 1000)
+            {
+                string result = String.Format("{0:#,###.#}", Math.Round(avg, 1));
+                return result;
+            }
+            else
+            {
+                string result = Math.Round(avg, 1).ToString();
+                return result;
+            }
+        }
+        private void ComboBox_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index == -1)
+                return;
+            ComboBox combo = ((ComboBox)sender);
+
+            SolidBrush brush = new SolidBrush(e.ForeColor);
+            Font font = e.Font;
+            DataRowView item = (DataRowView)combo.Items[e.Index];
+            if(SelectCondition_combobox.Items[8]!=null)
+            {
+                font = new System.Drawing.Font(font, FontStyle.Bold);
+            }
+            else
+            {
+                font = new System.Drawing.Font(font, FontStyle.Regular);
+            }
+            e.DrawBackground();
+            e.Graphics.DrawString(item.Row.Field<string>("SelectCondition_combobox"), font, brush, e.Bounds);
+            e.DrawFocusRectangle();
+
+        }
+        private void InsertDataRow1(double[] arr, DataRow dr, DataTable dt)
+        {
+            dr = dt.NewRow();
+            dr["타입"] = "Total Processor Time";
+            dr["최대"] = Max(arr);
+            dr["평균"] = Avg(arr);
+            dr["최소"] = Min(arr);
+            dt.Rows.Add(dr);
+        }
+        private void InsertDataRow2(double[] arr, DataRow dr, DataTable dt)
+        {
+            dr = dt.NewRow();
+            dr["타입"] = "Avg. Disk sec/Read";
+            dr["최대"] = Max(arr);
+            dr["평균"] = Avg(arr);
+            dr["최소"] = Min(arr);
+            dt.Rows.Add(dr);
+        }
+        private void InsertDataRow3(double[] arr, DataRow dr, DataTable dt)
+        {
+            dr = dt.NewRow();
+            dr["타입"] = "Available MByte";
+            dr["최대"] = Max(arr);
+            dr["평균"] = Avg(arr);
+            dr["최소"] = Min(arr);
+            dt.Rows.Add(dr);
+        }
+        private void InsertDataRow4(double[] arr, DataRow dr,DataTable dt)
+        {
+            dr = dt.NewRow();
+            dr["타입"] = "Batch Requests/sec";
+            dr["최대"] = Max(arr);
+            dr["평균"] = Avg(arr);
+            dr["최소"] = Min(arr);
+            dt.Rows.Add(dr);
+        }
+        private void InsertDataRow5(double[] arr, DataRow dr, DataTable dt)
+        {
+            dr = dt.NewRow();
+            dr["타입"] = "Page life expectancy";
+            dr["최대"] = Max(arr);
+            dr["평균"] = Avg(arr);
+            dr["최소"] = Min(arr);
+            dt.Rows.Add(dr);
+        }
+        private void InsertDataRow6(double[] arr, DataRow dr, DataTable dt)
+        {
+            dr = dt.NewRow();
+            dr["타입"] = "Locks(_Total) Average Wait Time(ms)";
+            dr["최대"] = Max(arr);
+            dr["평균"] = Avg(arr);
+            dr["최소"] = Min(arr);
+            dt.Rows.Add(dr);
+        }
+
+        private void bfHour_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            
+        }
+
+        private void Perfmon_Load(object sender, EventArgs e)
+        {
+            String[] hour = new string[24];
+            for (int i = 0; i < 24; i++)
+            {
+                if (i < 10)
+                {
+                    hour[i] = "0" + i.ToString();
+                }
+                else if(i > 9)
+                {
+                    hour[i] = i.ToString();
+                }
+            }
+            String[] miniute = new string[60];
+            for(int i = 0;i < 60; i++)
+            {
+                if(i<10)
+                {
+                    miniute[i] = "0" + i.ToString();
+                }
+                else if(i>9)
+                {
+                    miniute[i] = i.ToString();
+                }
+            }
+            String[] second = new string[60];
+            for(int i=0;i<60;i++)
+            {
+                if(i<10)
+                {
+                    second[i] = "0" + i.ToString();
+                }
+                else if(i>9)
+                {
+                    second[i] = i.ToString();
+                }
+            }
+
+            bfHour.Items.AddRange(hour);
+            bfHour.SelectedIndex = 8;
+            bfMiniute.Items.AddRange(miniute);
+            bfMiniute.SelectedIndex = 0;
+            bfSec.Items.AddRange(second);
+            bfSec.SelectedIndex = 0;
+
+            afHour.Items.AddRange(hour);
+            afHour.SelectedIndex = 12;
+            afMiniute.Items.AddRange(miniute);
+            afMiniute.SelectedIndex = 0;
+            afSec.Items.AddRange(second);
+            afSec.SelectedIndex = 0;
+
+            
+        }
+        
+        // 처음 시간 범위
+        private void TimeRange()
+        {
+            
+
+            string[] lines = new string[dt.Rows.Count];
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                lines[i] = dt.Rows[i].ItemArray[0].ToString();
+            }
+            string firsttime = string.Empty;
+            string lasttime = string.Empty;
+            string bfyear = string.Empty;
+            string bfmonth = string.Empty;
+            string bfday = string.Empty;
+            string afyear = string.Empty;
+            string afmonth = string.Empty;
+            string afday = string.Empty;
+            string[] datetimes = new string[lines.Length];
+            
+            string[] times = new string[lines.Length];
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string[] datavalue = lines[i].Split(',');
+                datetimes[i] = datavalue[0].Replace('"', ' ').Replace('\\', ' ').Trim();
+                string[] splitdates = datetimes[i].Split(' ');
+                string[] dates = splitdates[0].Split('/');
+                times[i] = splitdates[1];
+                if(i ==0)
+                {
+                    bfyear = dates[2];
+                    bfmonth = dates[0];
+                    bfday = dates[1];
+                }
+                else if(i == lines.Length-1)
+                {
+                    afyear = dates[2];
+                    afmonth = dates[0];
+                    afday = dates[1];
+                }
+                yearlist.Add(dates[2]);
+                monthlist.Add(dates[0]);
+                daylist.Add(dates[1]);
+
+                
+            }
+            firsttime = bfyear + "/" + bfmonth + "/" + bfday + " " + times[0];
+            lasttime = afyear + "/" + afmonth + "/" + afday + " " + times[lines.Length - 1];
+
+            firsttime_txtbox.Text = firsttime;
+            lasttime_txtbox.Text = lasttime;
+
+            yearlist = yearlist.Distinct().ToList();
+            monthlist = monthlist.Distinct().ToList();
+            daylist = daylist.Distinct().ToList();
+            
+            bfyear_box.Items.Clear();
+            bfmonth_box.Items.Clear();
+            bfday_box.Items.Clear();
+            afyear_box.Items.Clear();
+            afmonth_box.Items.Clear();
+            afday_box.Items.Clear();
+
+            bfyear_box.Items.AddRange(yearlist.ToArray());
+            bfmonth_box.Items.AddRange(monthlist.ToArray());
+            bfday_box.Items.AddRange(daylist.ToArray());
+            afyear_box.Items.AddRange(yearlist.ToArray());
+            afmonth_box.Items.AddRange(monthlist.ToArray());
+            afday_box.Items.AddRange(daylist.ToArray());
+
+            bfyear_box.Text = bfyear;
+            bfmonth_box.Text = bfmonth;
+            bfday_box.Text = bfday;
+            afyear_box.Text = afyear;
+            afmonth_box.Text = afmonth;
+            afday_box.Text = afday;
+
+            yearlist.Clear();
+            monthlist.Clear();
+            daylist.Clear();
+        }
+
+        //나중 시간 범위
+        private void TimeRange2()
+        {
+
+
+            string[] lines = new string[dt.Rows.Count];
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                lines[i] = dt.Rows[i].ItemArray[0].ToString();
+            }
+            string firsttime = string.Empty;
+            string lasttime = string.Empty;
+            string bfyear = string.Empty;
+            string bfmonth = string.Empty;
+            string bfday = string.Empty;
+            string afyear = string.Empty;
+            string afmonth = string.Empty;
+            string afday = string.Empty;
+            string[] datetimes = new string[lines.Length];
+            string[] times = new string[lines.Length];
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string[] datavalue = lines[i].Split(',');
+                datetimes[i] = datavalue[0].Replace('"', ' ').Replace('\\', ' ').Trim();
+                string[] splitdates = datetimes[i].Split(' ');
+                times[i] = splitdates[1];
+            }
+
+            bfyear = bfmonth_box.Text;
+            bfmonth = bfmonth_box.Text;
+            bfday = bfday_box.Text;
+            afyear = afyear_box.Text;
+            afmonth = afmonth_box.Text;
+            afday = afday_box.Text;
+
+            firsttime = bfyear + "/" + bfmonth + "/" + bfday + " " + times[0];
+            lasttime = afyear + "/" + afmonth + "/" + afday + " " + times[lines.Length - 1];
+
+            firsttime_txtbox.Text = firsttime;
+            lasttime_txtbox.Text = lasttime;
+
+            
+        }
+        private void chart1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+
+        }
+        
+        private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void chart1_Click_1(object sender, EventArgs e)
+        {
+            
+        }
+
+        private void label9_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void groupBox2_Enter(object sender, EventArgs e)
+        {
+
+        }
+
+        private void firsttime_txtbox_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+    }
+}
+
